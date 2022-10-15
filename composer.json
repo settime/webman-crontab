@@ -1,0 +1,13 @@
+{
+  "name": "fly-cms/webman-crontab",
+  "type": "library",
+  "license": "MIT",
+  "description": "Webman plugin fly-cms/webman-crontab",
+  "require": {
+  },
+  "autoload": {
+    "psr-4": {
+      "FlyCms\\WebmanCrontab\\": "src"
+    }
+  }
+}
