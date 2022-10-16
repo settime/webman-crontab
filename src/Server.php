@@ -361,7 +361,7 @@ abstract class Server implements CrontabBootstrap
             $code = $resultData['code'];
             $exception = $resultData['exception'];
 
-            $this->writeln('执行定时器任务#' . $data['id'] . ' ' . $data['rule'] . ' ' . $data['target'], $result);
+            $this->writeln( 'worker:' . $this->worker->id .'  执行定时器任务#' . $data['id'] . ' ' . $data['rule'] . ' ' . $data['target'], $result);
             $this->isSingleton($data);
             $endTime = microtime(true);
 

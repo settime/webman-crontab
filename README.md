@@ -7,12 +7,12 @@
 衍生出来的。<br>
 
 ## 介绍
-跟原组件区别,去除think-orm依赖,重写任务锁逻辑,改写多进程任务执行逻辑,代码优化。
+跟原组件区别,去除think-orm依赖,重写任务锁逻辑,解决未知情况下出现的死锁,改写多进程任务执行逻辑,代码优化。
 
 安装
 
 ```shell
-composer require 
+composer require fly-cms/webman-crontab
 ```
 
 ## 使用
