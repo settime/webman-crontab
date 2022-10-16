@@ -2,5 +2,4 @@
 /.vscode
 *.log
 .env
-/tests/tmp
 /tests/.phpunit.result.cache
