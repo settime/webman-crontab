@@ -12,20 +12,21 @@ use Workerman\Worker;
  */
 abstract class Server implements CrontabBootstrap
 {
-    public const FORBIDDEN_STATUS = '0';
+    //修改类常量,兼容7.0
+    public static $FORBIDDEN_STATUS = '0';
 
-    public const NORMAL_STATUS = '1';
+    public static $NORMAL_STATUS = '1';
 
     // 命令任务
-    public const COMMAND_CRONTAB = '1';
+    public static $COMMAND_CRONTAB = '1';
     // 类任务
-    public const CLASS_CRONTAB = '2';
+    public static $CLASS_CRONTAB = '2';
     // URL任务
-    public const URL_CRONTAB = '3';
+    public static $URL_CRONTAB = '3';
     // EVAL 任务
-    public const EVAL_CRONTAB = '4';
+    public static $EVAL_CRONTAB = '4';
     //shell 任务
-    public const SHELL_CRONTAB = '5';
+    public static $SHELL_CRONTAB = '5';
 
     protected $worker;
 
@@ -318,7 +319,7 @@ abstract class Server implements CrontabBootstrap
         if (empty($data)) {
             return;
         }
-        if ($data['status'] != self::NORMAL_STATUS){
+        if ($data['status'] != self::$NORMAL_STATUS){
             return;
         }
 
@@ -334,19 +335,19 @@ abstract class Server implements CrontabBootstrap
             }
 
             switch ($data['type']) {
-                case self::COMMAND_CRONTAB:
+                case self::$COMMAND_CRONTAB:
                     $resultData = $this->parseCommand($data);
                     break;
-                case self::CLASS_CRONTAB:
+                case self::$CLASS_CRONTAB:
                     $resultData = $this->parseClass($data);
                     break;
-                case self::URL_CRONTAB:
+                case self::$URL_CRONTAB:
                     $resultData = $this->parseUrl($data);
                     break;
-                case self::SHELL_CRONTAB:
+                case self::$SHELL_CRONTAB:
                     $resultData = $this->parseShell($data);
                     break;
-                case self::EVAL_CRONTAB:
+                case self::$EVAL_CRONTAB:
                     $resultData = $this->parseEval($data);
                     break;
                 default:
