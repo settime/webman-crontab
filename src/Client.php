@@ -6,7 +6,6 @@ class Client
 {
 
     private $client;
-    protected static $instance = null;
 
     public function __construct()
     {
@@ -15,10 +14,7 @@ class Client
 
     public static function instance()
     {
-        if (!static::$instance) {
-            static::$instance = new static();
-        }
-        return static::$instance;
+        return new static();
     }
 
     /**

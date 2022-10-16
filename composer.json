@@ -4,6 +4,8 @@
   "license": "MIT",
   "description": "Webman plugin fly-cms/webman-crontab",
   "require": {
+    "ext-json": "*",
+    "ext-redis": "*"
   },
   "autoload": {
     "psr-4": {

@@ -416,7 +416,7 @@ abstract class Server implements CrontabBootstrap
     {
         $key_name = $this->createTaskUuid($crontab);
         if ($this->getRedisHandle()->setnx($key_name, true)) {
-            $this->getRedisHandle()->expire($key_name, 600);
+            $this->getRedisHandle()->expire($key_name, 3600);
             return true;
         }
         return false;
