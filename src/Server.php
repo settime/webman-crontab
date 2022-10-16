@@ -438,7 +438,7 @@ abstract class Server implements CrontabBootstrap
                 'crontab_id' => $data['id'] ?? '',
                 'target' => $data['target'] ?? '',
                 'parameter' => $data['parameter'] ?? '',
-                'exception' => $exception,
+                'exception' => '执行进程id: '. $this->worker->id .'  '.$exception,
                 'return_code' => $code,
                 'running_time' => round($endTime - $startTime, 6),
                 'create_time' => $startTime,
