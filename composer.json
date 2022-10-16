@@ -3,7 +3,12 @@
   "type": "library",
   "license": "MIT",
   "description": "Webman plugin fly-cms/webman-crontab",
+  "support": {
+    "email": "2548391340@qq.com"
+  },
   "require": {
+    "php": ">=7.0",
+    "workerman/crontab": "^>=1.0",
     "ext-json": "*",
     "ext-redis": "*"
   },
