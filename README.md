@@ -1,4 +1,4 @@
-# 动态秒级定时任务
+# workerman/crontab定时任务管理组件
 
 ## 概述
 
@@ -7,7 +7,7 @@
 衍生出来的。<br>
 
 ## 介绍
-跟原组件区别,去除think-orm依赖,重写任务锁逻辑,解决未知情况下出现的死锁,改写多进程任务执行逻辑,代码优化。
+跟原组件区别,去除think-orm依赖,重写任务锁逻辑,解决未知情况下出现死锁,改写多进程任务执行逻辑,代码优化。
 
 安装
 
@@ -101,7 +101,7 @@ class WebmanCrontab extends Server
     /**
      * @param $id
      * @param $last_running_time
-     * @return mixed 这个方法负责修改任务最后执行时间与执行次数
+     * @return mixed 修改任务最后执行时间与执行次数
      */
     public function updateTaskRunState($id, $last_running_time)
     {
@@ -113,7 +113,7 @@ class WebmanCrontab extends Server
     }
 
     /**
-     * @return \Workerman\Redis\Client 这个方法返回workerman异步redis实例
+     * @return \Workerman\Redis\Client 返回workerman异步redis实例
      */
     public function getWorkermanRedis()
     {
@@ -129,7 +129,8 @@ class WebmanCrontab extends Server
 
 ```
 
-接着到config/process.php 添加自定义进程任务,示例如下:
+接着到config/process.php 添加自定义进程任务,示例如下:<br>
+注意事项,如果监听的地址不是2345端口,请注意修改插件配置端口与之对应
 ````shell
     'WebmanCrontab' => [
         'handler' => \app\process\WebmanCrontab::class,
@@ -137,4 +138,29 @@ class WebmanCrontab extends Server
         'count' => 4,
     ],
 ````
-然后打开配置文件
+注意,只提供了 添加,重启,删除 三个接口,对任务进行了修改的话,进行重启就好.
+## 添加任务
+````shell
+$param = [
+    'method' => 'crontabCreate',
+    'args' => ['id' => $id]
+];
+$result = \FlyCms\WebmanCrontab\Client::instance()->request($param);
+````
+## 重启任务
+````shell
+$param = [
+        'method' => 'crontabReload',
+        'args' => ['id' => $id]
+    ];
+$result = \FlyCms\WebmanCrontab\Client::instance()->request($param);
+````
+
+## 删除任务
+````shell
+$param = [
+    'method' => 'crontabDelete',
+    'args' => ['id' => $id]
+];
+$result = \FlyCms\WebmanCrontab\Client::instance()->request($param);
+````
