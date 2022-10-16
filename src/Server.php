@@ -209,6 +209,10 @@ abstract class Server implements CrontabBootstrap
     private function parseClass($data)
     {
         $class = trim($data['target'] ?? '');
+        $parameter = $data['parameter'] ?? [];
+        if ($parameter){
+            $parameter = json_decode($parameter, true);
+        }
         if (!$class) {
             $code = 1;
             $result = false;
@@ -223,29 +227,22 @@ abstract class Server implements CrontabBootstrap
             array_pop($class);
             $class = implode('@', $class);
         }
-        if (class_exists($class) && method_exists($class, $method)) {
-            try {
-                $result = true;
-                $code = 0;
 
-                $instance = new $class();
-
-                $parameters = !empty($data['parameter']) ? json_decode($data['parameter'], true) : [];
-                if (!empty($data['parameter']) && is_array($parameters)) {
-                    $exception = $instance->{$method}($parameters);
-                } else {
-                    $exception = $instance->{$method}();
-                }
-            } catch (\Throwable $throwable) {
-                $result = false;
-                $code = 1;
-                $exception = $throwable->getMessage();
+        $result = true;
+        $code = 0;
+        try {
+            if ( !(class_exists($class) && method_exists($class, $method)) ) {
+                throw new \Exception('方法或类不存在');
             }
-        } else {
+            $instance = new $class();
+            $exception = call_user_func([$instance, $method], $parameter);
+
+        } catch (\Throwable $e) {
             $result = false;
             $code = 1;
-            $exception = "方法或类不存在或者错误";
+            $exception = $e->getMessage();
         }
+
         return ['result' => $result, 'code' => $code, 'exception' => $exception];
     }
 
@@ -329,13 +326,13 @@ abstract class Server implements CrontabBootstrap
             //运行次数加1,很重要,多进程情况下用来检测当前次数是否已执行
             $data['running_times'] += 1;
 
+            $startTime = microtime(true);
             //获取锁失败,说明有进程把任务执行了
             if (!$this->lockTask($data)) {
                 $this->isSingleton($data);
                 return;
             }
 
-            $startTime = microtime(true);
             switch ($data['type']) {
                 case self::COMMAND_CRONTAB:
                     $resultData = $this->parseCommand($data);
@@ -353,9 +350,10 @@ abstract class Server implements CrontabBootstrap
                     $resultData = $this->parseEval($data);
                     break;
                 default:
-                    //任务类型不正确,不执行
-                    $this->writeln('执行定时器任务失败, 任务类型错误-----任务id: ' . $data['id']);
-                    return;
+                    //任务类型不正确,
+                    $resultData = [
+                        'result' => false, 'code' => 1, 'exception'  => '执行任务失败, 任务类型错误-----任务id: ' . $data['id']
+                    ];
             }
             $result = $resultData['result'];
             $code = $resultData['code'];
@@ -385,6 +383,7 @@ abstract class Server implements CrontabBootstrap
     /**
      * 是否单次
      * @param $crontab
+     *
      * @return void
      */
     private function isSingleton($crontab)
