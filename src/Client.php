@@ -14,7 +14,7 @@ class Client
 
     public static function instance()
     {
-        return new static();
+        return new static(); //这里不要单例模式,不做心跳链接资源无法确定什么时候会断
     }
 
     /**

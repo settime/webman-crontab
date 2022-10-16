@@ -130,7 +130,7 @@ abstract class Server implements CrontabBootstrap
 
 
     /**
-     * 清除定时任务
+     * 删除定时任务
      * @param array $param
      */
     private function crontabDelete(array $param)
