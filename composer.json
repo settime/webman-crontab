@@ -8,7 +8,7 @@
   },
   "require": {
     "php": ">=7.0",
-    "workerman/crontab": "^>=1.0",
+    "workerman/crontab": "^*",
     "ext-json": "*",
     "ext-redis": "*"
   },
