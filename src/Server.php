@@ -415,11 +415,18 @@ abstract class Server implements CrontabBootstrap
     private function lockTask($crontab)
     {
         $key_name = $this->createTaskUuid($crontab);
+
         if ($this->getRedisHandle()->setnx($key_name, true)) {
-            $this->getRedisHandle()->expire($key_name, 3600);
-            return true;
+            return false;
         }
-        return false;
+        $this->getRedisHandle()->expire($key_name, 86400);
+
+        //锁id,限制有任务执行的时候绝对不让其它进程再执行
+        if(!$this->getRedisHandle()->setnx($crontab['id'])){
+            return false;
+        }
+        $this->getRedisHandle()->expire($crontab['id'],10);
+        return true;
     }
 
 
