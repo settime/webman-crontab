@@ -439,14 +439,14 @@ abstract class Server implements CrontabBootstrap
      * @return void
      * 记录执行日志
      */
-    private function crontabRunLog($data, $startTime, $endTime, $code = 0, $exception = ''): void
+    private function crontabRunLog($data, $startTime, $endTime, $code = 0, $exception = '')
     {
         if ($this->writeLog) {
             $this->writeRunLog([
                 'crontab_id' => $data['id'] ?? '',
                 'target' => $data['target'] ?? '',
                 'parameter' => $data['parameter'] ?? '',
-                'exception' => '执行进程id: '. $this->worker->id .'  '.$exception,
+                'exception' => '进程id: ' . $this->worker->id . '--执行次数:' . $data['running_times'] . '---' . $exception,
                 'return_code' => $code,
                 'running_time' => round($endTime - $startTime, 6),
                 'create_time' => $startTime,
