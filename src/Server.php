@@ -422,7 +422,7 @@ abstract class Server implements CrontabBootstrap
         $this->getRedisHandle()->expire($key_name, 86400);
 
         //锁id,限制有任务执行的时候绝对不让其它进程再执行
-        if(!$this->getRedisHandle()->setnx($crontab['id'])){
+        if(!$this->getRedisHandle()->setnx($crontab['id'],true)){
             return false;
         }
         $this->getRedisHandle()->expire($crontab['id'],10);
