@@ -38,10 +38,4 @@ interface CrontabBootstrap
     public function updateTaskRunState($id,$last_running_time);
 
 
-    /**
-     * @return \Workerman\Redis\Client
-     *  workerman的异步订阅redis实例
-     */
-    public function getWorkermanRedis();
-
 }

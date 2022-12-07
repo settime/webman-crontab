@@ -112,19 +112,6 @@ class WebmanCrontab extends Server
             ]);
     }
 
-    /**
-     * @return \Workerman\Redis\Client 返回workerman异步redis实例
-     */
-    public function getWorkermanRedis()
-    {
-        $config= config('redis.default');
-        $address = "redis://{$config['host']}:{$config['port']}";
-        $redis = new Client($address);
-        if ($config['password']){
-            $redis->auth($config['password']);
-        }
-        return $redis;
-    }
 }
 
 ```
@@ -138,29 +125,13 @@ class WebmanCrontab extends Server
         'count' => 4,
     ],
 ````
-注意,只提供了 添加,重启,删除 三个接口,对任务进行了修改的话,进行重启就好.
-## 添加任务
-````shell
-$param = [
-    'method' => 'crontabCreate',
-    'args' => ['id' => $id]
-];
-$result = \FlyCms\WebmanCrontab\Client::instance()->request($param);
-````
+注意,只提供了重启接口,对任务进行任何的修改,直接调用重启接口
+
 ## 重启任务
 ````shell
 $param = [
         'method' => 'crontabReload',
-        'args' => ['id' => $id]
+        'args' => ['id' => '1,2,3']
     ];
-$result = \FlyCms\WebmanCrontab\Client::instance()->request($param);
-````
-
-## 删除任务
-````shell
-$param = [
-    'method' => 'crontabDelete',
-    'args' => ['id' => $id]
-];
 $result = \FlyCms\WebmanCrontab\Client::instance()->request($param);
 ````

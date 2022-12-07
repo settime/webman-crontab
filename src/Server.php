@@ -7,6 +7,7 @@ use Workerman\Connection\TcpConnection;
 use Workerman\Crontab\Crontab;
 use Workerman\Lib\Timer;
 use Workerman\Worker;
+use Workerman\Redis\Client as RedisClient;
 
 /**
  */
@@ -43,6 +44,17 @@ abstract class Server implements CrontabBootstrap
     protected $writeLog = true;
 
     /**
+     * @var array
+     * redis 配置
+     */
+    protected $redisConfig = [
+        'host' => 'redis://127.0.0.1:6379',
+        'options' => [
+            'auth' => null,       // 密码，字符串类型，可选参数
+        ]
+    ];
+
+    /**
      * 任务进程池
      * @var Crontab[] array
      */
@@ -63,11 +75,23 @@ abstract class Server implements CrontabBootstrap
      * 订阅事件
      */
     private function subscribeEvent(){
+        // 创建订阅实例
         if(!$this->subscribeClient){
-            $this->subscribeClient = $this->getWorkermanRedis();
+            $address = $this->redisConfig['host'];
+            $redis = new RedisClient($address);
+            if ($this->redisConfig['options']['auth']){
+                $redis->auth($this->redisConfig['options']['auth']);
+            }
+            $this->subscribeClient =   $redis;
         }
+        //创建发布实例
         if(!$this->publishClient){
-            $this->publishClient = $this->getWorkermanRedis();
+            $address = $this->redisConfig['host'];
+            $redis = new RedisClient($address);
+            if ($this->redisConfig['options']['auth']){
+                $redis->auth($this->redisConfig['options']['auth']);
+            }
+            $this->publishClient = $redis;
             Timer::add(30,function (){//保持链接活跃
                $this->publishClient->publish('ping','ping');
             });
@@ -92,9 +116,13 @@ abstract class Server implements CrontabBootstrap
         $config = config('plugin.fly-cms.webman-crontab.app');
         $this->debug = $config['debug'] ?? true;
         $this->writeLog = $config['write_log'] ?? true;
+        $this->redisConfig = $config['redis'] ?? $this->redisConfig;
+
         $this->worker = $worker;
 
+        //订阅事件
         $this->subscribeEvent();
+        //初始化任务
         $this->crontabInit();
     }
 
@@ -106,46 +134,17 @@ abstract class Server implements CrontabBootstrap
         $method = $data['method'] ?? '';
         $args = $data['args'] ?? '';
 
-        // 这里只有3个方法, 添加,删除,重启, 如果修改的话,一样是调用重启任务
+        // 这里只有保留一个重启方法,对任务进行任何操作,直接调用重启解决
         if(!in_array($method,['crontabCreate','crontabDelete','crontabReload'])){
             $connection->send(json_encode(['code' => 400, 'msg' => "{$method} is not found"]));
             return;
         }
+        //通知所有进程该任务进行重启
+        $this->publishClient->publish('change_contrab', json_encode(['method'=>'crontabReload','args' => $args]));
 
-        //通知所有进程
-        $this->publishClient->publish('change_contrab', json_encode(['method'=>$method,'args' => $args]));
         $connection->send(json_encode(['code' => 200, 'msg' => "ok"]));
     }
 
-
-    /**
-     * 创建定时任务
-     * @param array $param
-     */
-    private function crontabCreate(array $param)
-    {
-        $id = $param['id'] ?? '';
-
-        $this->crontabRun($id);
-    }
-
-
-    /**
-     * 删除定时任务
-     * @param array $param
-     */
-    private function crontabDelete(array $param)
-    {
-        $id = $param['id'] ?? '';
-        $ids = explode(',', (string)$id);
-
-        foreach ($ids as $item) {
-            if (isset($this->crontabPool[$item])) {
-                $this->crontabPool[$item]['crontab']->destroy();
-                unset($this->crontabPool[$item]);
-            }
-        }
-    }
 
     /**
      * 重启定时任务
@@ -233,7 +232,7 @@ abstract class Server implements CrontabBootstrap
         $code = 0;
         try {
             if ( !(class_exists($class) && method_exists($class, $method)) ) {
-                throw new \Exception('方法或类不存在');
+                throw new \Exception('class or method not found');
             }
             $instance = new $class();
             $exception = call_user_func([$instance, $method], $parameter);
@@ -425,7 +424,7 @@ abstract class Server implements CrontabBootstrap
         if(!$this->getRedisHandle()->setnx($crontab['id'],true)){
             return false;
         }
-        $this->getRedisHandle()->expire($crontab['id'],10);
+        $this->getRedisHandle()->expire($crontab['id'],15);
         return true;
     }
 
@@ -466,62 +465,6 @@ abstract class Server implements CrontabBootstrap
         if ($this->debug) {
             echo 'worker:' . $this->worker->id . ' [' . date('Y-m-d H:i:s') . '] ' . $msg . ($isSuccess ? " [Ok] " : " [Fail] ") . PHP_EOL;
         }
-    }
-
-
-    /**
-     * 创建定时器任务表
-     */
-    private function createCrontabTable()
-    {
-        $sql = <<<SQL
- CREATE TABLE IF NOT EXISTS `system_crontab`  (
-  `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `title` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '任务标题',
-  `type` tinyint(1) NOT NULL DEFAULT 1 COMMENT '任务类型 (1 command, 2 class, 3 url, 4 eval)',
-  `rule` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '任务执行表达式',
-  `target` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '调用任务字符串',
-  `parameter` varchar(500)  COMMENT '任务调用参数', 
-  `running_times` int(11) NOT NULL DEFAULT '0' COMMENT '已运行次数',
-  `last_running_time` int(11) NOT NULL DEFAULT '0' COMMENT '上次运行时间',
-  `remark` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '备注',
-  `sort` int(11) NOT NULL DEFAULT 0 COMMENT '排序，越大越前',
-  `status` tinyint(4) NOT NULL DEFAULT 0 COMMENT '任务状态状态[0:禁用;1启用]',
-  `create_time` int(11) NOT NULL DEFAULT 0 COMMENT '创建时间',
-  `update_time` int(11) NOT NULL DEFAULT 0 COMMENT '更新时间',
-  `singleton` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否单次执行 (0 是 1 不是)',
-  PRIMARY KEY (`id`) USING BTREE,
-  INDEX `title`(`title`) USING BTREE,
-  INDEX `create_time`(`create_time`) USING BTREE,
-  INDEX `status`(`status`) USING BTREE,
-  INDEX `type`(`type`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '定时器任务表' ROW_FORMAT = DYNAMIC
-SQL;
-
-    }
-
-    /**
-     * 定时器任务流水表
-     */
-    private function createCrontabLogTable()
-    {
-        $sql = <<<SQL
-CREATE TABLE IF NOT EXISTS `system_crontab_log`  (
-  `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT,
-  `crontab_id` bigint UNSIGNED NOT NULL COMMENT '任务id',
-  `target` varchar(255) NOT NULL COMMENT '任务调用目标字符串',
-  `parameter` varchar(500)  COMMENT '任务调用参数', 
-  `exception` text  COMMENT '任务执行或者异常信息输出',
-  `return_code` tinyint(1) NOT NULL DEFAULT 0 COMMENT '执行返回状态[0成功; 1失败]',
-  `running_time` varchar(10) NOT NULL COMMENT '执行所用时间',
-  `create_time` int(11) NOT NULL DEFAULT 0 COMMENT '创建时间',
-  `update_time` int(11) NOT NULL DEFAULT 0 COMMENT '更新时间',
-  PRIMARY KEY (`id`) USING BTREE,
-  INDEX `create_time`(`create_time`) USING BTREE,
-  INDEX `crontab_id`(`crontab_id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '定时器任务执行日志表' ROW_FORMAT = DYNAMIC
-SQL;
-
     }
 
 }
