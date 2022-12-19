@@ -91,11 +91,11 @@ class WebmanCrontab extends Server
     }
 
     /**
-     * @return \Redis 这个方法返回redis实例
+     * @return \Redis 这个方法返回redis实例,这里务必返回redis实例而不是其它框架封装的缓存实例
      */
     public function getRedisHandle()
     {
-        return redisCache();
+        return redisCache()->handler();
     }
 
     /**
