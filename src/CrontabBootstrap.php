@@ -25,12 +25,6 @@ interface CrontabBootstrap
     public function writeRunLog($insertData = []);
 
     /**
-     * @return \Redis
-     * 获取redis
-     */
-    public function getRedisHandle();
-
-    /**
      * @param $last_running_time
      * @return mixed
      * 更新任务最后运行时间,这里要把运行次数加 1

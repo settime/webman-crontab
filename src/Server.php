@@ -2,7 +2,12 @@
 
 namespace FlyCms\WebmanCrontab;
 
-use Throwable;
+use FlyCms\WebmanCrontab\event\ClassTask;
+use FlyCms\WebmanCrontab\event\CommandTask;
+use FlyCms\WebmanCrontab\event\EvalTask;
+use FlyCms\WebmanCrontab\event\EventBootstrap;
+use FlyCms\WebmanCrontab\event\ShellTask;
+use FlyCms\WebmanCrontab\event\UrlTask;
 use Workerman\Connection\TcpConnection;
 use Workerman\Crontab\Crontab;
 use Workerman\Lib\Timer;
@@ -10,25 +15,29 @@ use Workerman\Worker;
 use Workerman\Redis\Client as RedisClient;
 
 /**
+ *
  */
 abstract class Server implements CrontabBootstrap
 {
-    //修改类常量,兼容7.0
     public static $FORBIDDEN_STATUS = '0';
 
     public static $NORMAL_STATUS = '1';
 
-    // 命令任务
-    public static $COMMAND_CRONTAB = '1';
-    // 类任务
-    public static $CLASS_CRONTAB = '2';
-    // URL任务
-    public static $URL_CRONTAB = '3';
-    // EVAL 任务
-    public static $EVAL_CRONTAB = '4';
-    //shell 任务
-    public static $SHELL_CRONTAB = '5';
+    /**
+     * @var EventBootstrap[]
+     * 任务类型与与之对应的解析类
+     */
+    public $taskType = [
+        1 => CommandTask::class,
+        2 => ClassTask::class,
+        3 => UrlTask::class,
+        4 => EvalTask::class,
+        5 => ShellTask::class
+    ];
 
+    /**
+     * @var Worker 进程
+     */
     protected $worker;
 
     /**
@@ -61,6 +70,12 @@ abstract class Server implements CrontabBootstrap
     private $crontabPool = [];
 
     /**
+     * @var array
+     * 任务锁资源池
+     */
+    protected $fpsPool = [];
+
+    /**
      * @var \Workerman\Redis\Client 订阅实例
      */
     protected $subscribeClient;
@@ -74,31 +89,32 @@ abstract class Server implements CrontabBootstrap
      * @return void
      * 订阅事件
      */
-    private function subscribeEvent(){
+    private function subscribeEvent()
+    {
         // 创建订阅实例
-        if(!$this->subscribeClient){
+        if (!$this->subscribeClient) {
             $address = $this->redisConfig['host'];
             $redis = new RedisClient($address);
-            if ($this->redisConfig['options']['auth']){
+            if ($this->redisConfig['options']['auth']) {
                 $redis->auth($this->redisConfig['options']['auth']);
             }
-            $this->subscribeClient =   $redis;
+            $this->subscribeClient = $redis;
         }
         //创建发布实例
-        if(!$this->publishClient){
+        if (!$this->publishClient) {
             $address = $this->redisConfig['host'];
             $redis = new RedisClient($address);
-            if ($this->redisConfig['options']['auth']){
+            if ($this->redisConfig['options']['auth']) {
                 $redis->auth($this->redisConfig['options']['auth']);
             }
             $this->publishClient = $redis;
-            Timer::add(30,function (){//保持链接活跃
-               $this->publishClient->publish('ping','ping');
+            Timer::add(30, function () {//保持链接活跃
+                $this->publishClient->publish('ping', 'ping');
             });
         }
 
         //订阅任务改变事件
-        $this->subscribeClient->subscribe('change_contrab',function ($channel, $message){
+        $this->subscribeClient->subscribe('change_contrab', function ($channel, $message) {
             $data = json_decode($message, true);
             $method = $data['method'] ?? '';
             $args = $data['args'] ?? '';
@@ -106,20 +122,25 @@ abstract class Server implements CrontabBootstrap
         });
 
         //订阅一个心跳链接,避免通讯断了
-        $this->subscribeClient->subscribe('ping',function (){
+        $this->subscribeClient->subscribe('ping', function () {
             return;
         });
     }
 
+    /**
+     * @param Worker $worker
+     * @return void
+     * 进程启动
+     */
     public function onWorkerStart(Worker $worker)
     {
         $config = config('plugin.fly-cms.webman-crontab.app');
+
         $this->debug = $config['debug'] ?? true;
         $this->writeLog = $config['write_log'] ?? true;
         $this->redisConfig = $config['redis'] ?? $this->redisConfig;
 
         $this->worker = $worker;
-
         //订阅事件
         $this->subscribeEvent();
         //初始化任务
@@ -127,21 +148,24 @@ abstract class Server implements CrontabBootstrap
     }
 
 
+    /**
+     * @param TcpConnection $connection
+     * @param $data
+     * @return void
+     */
     public function onMessage(TcpConnection $connection, $data)
     {
-
         $data = json_decode($data, true);
         $method = $data['method'] ?? '';
         $args = $data['args'] ?? '';
 
         // 这里只有保留一个重启方法,对任务进行任何操作,直接调用重启解决
-        if(!in_array($method,['crontabCreate','crontabDelete','crontabReload'])){
+        if (!in_array($method, ['crontabCreate', 'crontabDelete', 'crontabReload'])) {
             $connection->send(json_encode(['code' => 400, 'msg' => "{$method} is not found"]));
             return;
         }
         //通知所有进程该任务进行重启
-        $this->publishClient->publish('change_contrab', json_encode(['method'=>'crontabReload','args' => $args]));
-
+        $this->publishClient->publish('change_contrab', json_encode(['method' => 'crontabReload', 'args' => $args]));
         $connection->send(json_encode(['code' => 200, 'msg' => "ok"]));
     }
 
@@ -152,7 +176,7 @@ abstract class Server implements CrontabBootstrap
      */
     private function crontabReload(array $param)
     {
-        $ids = explode(',', (string)($param['id']??''));
+        $ids = explode(',', (string)($param['id'] ?? ''));
         foreach ($ids as $id) {
             if (isset($this->crontabPool[$id])) {
                 $this->crontabPool[$id]['crontab']->destroy();
@@ -170,143 +194,11 @@ abstract class Server implements CrontabBootstrap
     private function crontabInit()
     {
         $data = $this->getAllTask();
-
-        foreach ($data as $item){
+        foreach ($data as $item) {
             $this->crontabRun($item['id']);
         }
     }
 
-
-    /**
-     * @param $crontab array 任务数据
-     * @return array
-     * 解析 command 任务
-     */
-    private function parseCommand($crontab)
-    {
-        $code = 0;
-        $result = true;
-        try {
-            if (strpos($crontab['target'], 'php webman') !== false) {
-                $command = $crontab['target'];
-            } else {
-                $command = "php webman " . $crontab['target'];
-            }
-            $exception = shell_exec($command);
-        } catch (Throwable $e) {
-            $result = false;
-            $code = 1;
-            $exception = $e->getMessage();
-        }
-        return ['result' => $result, 'code' => $code, 'exception' => $exception];
-    }
-
-    /**
-     * @param $data
-     * @return array
-     * 解析 class 任务
-     */
-    private function parseClass($data)
-    {
-        $class = trim($data['target'] ?? '');
-        $parameter = $data['parameter'] ?? [];
-        if ($parameter){
-            $parameter = json_decode($parameter, true);
-        }
-        if (!$class) {
-            $code = 1;
-            $result = false;
-            $exception = '方法或类不存在或者错误';
-            return ['result' => $result, 'code' => $code, 'exception' => $exception];
-        }
-
-        $method = 'execute';
-        if (strpos($class, '@') !== false) {
-            $class = explode('@', $class);
-            $method = end($class);
-            array_pop($class);
-            $class = implode('@', $class);
-        }
-
-        $result = true;
-        $code = 0;
-        try {
-            if ( !(class_exists($class) && method_exists($class, $method)) ) {
-                throw new \Exception('class or method not found');
-            }
-            $instance = new $class();
-            $exception = call_user_func([$instance, $method], $parameter);
-
-        } catch (\Throwable $e) {
-            $result = false;
-            $code = 1;
-            $exception = $e->getMessage();
-        }
-
-        return ['result' => $result, 'code' => $code, 'exception' => $exception];
-    }
-
-    /**
-     * @param $data
-     * @return array
-     * 解析 url 任务
-     */
-    private function parseUrl($data)
-    {
-        $url = trim($data['target'] ?? '');
-
-        $code = 0;
-        $exception = '';
-        try {
-            $client = new \GuzzleHttp\Client();
-            $response = $client->get($url);
-            $result = $response->getStatusCode() === 200;
-        } catch (\Throwable $throwable) {
-            $result = false;
-            $code = 1;
-            $exception = $throwable->getMessage();
-        }
-        return ['result' => $result, 'code' => $code, 'exception' => $exception];
-    }
-
-    /**
-     * @param $data
-     * @return array
-     * 解析 eval 任务
-     */
-    private function parseEval($data)
-    {
-        $result = true;
-        $code = 0;
-        $exception = '';
-        try {
-            eval($data['target']);
-        } catch (\Throwable $throwable) {
-            $result = false;
-            $code = 1;
-            $exception = $throwable->getMessage();
-        }
-        return ['result' => $result, 'code' => $code, 'exception' => $exception];
-    }
-
-    /**
-     * @param $data
-     * @return array
-     *  解析 shell 任务
-     */
-    private function parseShell($data)
-    {
-        $code = 0;
-        $result = true;
-        try {
-            $exception = shell_exec($data['target']);
-        } catch (\Throwable $e) {
-            $result = false;
-            $code = 1;
-            $exception = $e->getMessage();
-        }
-        return ['result' => $result, 'code' => $code, 'exception' => $exception];
-    }
 
     /**
      * 创建定时器
@@ -318,7 +210,7 @@ abstract class Server implements CrontabBootstrap
         if (empty($data)) {
             return;
         }
-        if ($data['status'] != self::$NORMAL_STATUS){
+        if ($data['status'] != self::$NORMAL_STATUS) {
             return;
         }
 
@@ -327,43 +219,29 @@ abstract class Server implements CrontabBootstrap
             $data['running_times'] += 1;
 
             $startTime = microtime(true);
-            //获取锁失败,说明有进程把任务执行了
+            //获取锁.
             if (!$this->lockTask($data)) {
                 $this->isSingleton($data);
                 return;
             }
 
-            switch ($data['type']) {
-                case self::$COMMAND_CRONTAB:
-                    $resultData = $this->parseCommand($data);
-                    break;
-                case self::$CLASS_CRONTAB:
-                    $resultData = $this->parseClass($data);
-                    break;
-                case self::$URL_CRONTAB:
-                    $resultData = $this->parseUrl($data);
-                    break;
-                case self::$SHELL_CRONTAB:
-                    $resultData = $this->parseShell($data);
-                    break;
-                case self::$EVAL_CRONTAB:
-                    $resultData = $this->parseEval($data);
-                    break;
-                default:
-                    //任务类型不正确,
-                    $resultData = [
-                        'result' => false, 'code' => 1, 'exception'  => '执行任务失败, 任务类型错误-----任务id: ' . $data['id']
-                    ];
+            if (!isset($this->taskType[$data['type']])){
+                //任务类型不正确,
+                $resultData = [
+                    'result' => false, 'code' => 1, 'exception' => '执行任务失败, 任务类型错误-----任务id: ' . $data['id']
+                ];
+            }else{
+                $resultData = $this->taskType[$data['type']]::parse($data);
             }
             $result = $resultData['result'];
             $code = $resultData['code'];
             $exception = $resultData['exception'];
 
-            $this->writeln( 'worker:' . $this->worker->id .'  执行定时器任务#' . $data['id'] . ' ' . $data['rule'] . ' ' . $data['target'], $result);
+            $this->writeln('worker:' . $this->worker->id . '  执行定时器任务#' . $data['id'] . ' ' . $data['rule'] . ' ' . $data['target'], $result);
             $this->isSingleton($data);
             $endTime = microtime(true);
 
-            $this->updateTaskRunState($data['id'],$startTime);
+            $this->updateTaskRunState($data['id'], $startTime);
 
             $this->crontabRunLog($data, $startTime, $endTime, $code, $exception);
 
@@ -402,26 +280,72 @@ abstract class Server implements CrontabBootstrap
      */
     private function createTaskUuid($crontab)
     {
-        // 以任务id + 运行次数作为唯一id, 这样在过期范围内,只会有一个进程能执行到该次任务,杜绝死锁的情况发生.
-        return md5('task_' . $crontab['id'] . '_' . $crontab['running_times']);
+        // 以任务id + 运行次数作为唯一id, 这样在过期范围内,只会有一个进程能执行到该次任务
+        return  $crontab['id'] . '_' . $crontab['running_times'];
     }
 
     /**
      * @param $crontab
      * @return bool
-     * 锁定任务,解决多进程同时执行任务问题,不需要解锁,等过期直接释放
+     * 锁定任务,解决多进程同时执行任务问题
      */
     private function lockTask($crontab)
     {
-        //锁id1秒
-        if(!$this->getRedisHandle()->set($crontab['id'],true,['nx', 'ex' => 2])){
-            return false;
+        $file_name = __DIR__.'/temp/'. "crontab_task_{$crontab['id']}.json";
+        $bool_state = false;
+        try{
+
+            $this->fpsPool[$crontab['id']] = fopen($file_name, 'a+');
+            if (!$this->fpsPool[$crontab['id']]) {
+                throwMessage('');
+            }
+            $bool = flock($this->fpsPool[$crontab['id']], LOCK_EX);
+            if (!$bool) {
+                throwMessage('');
+            }
+
+            $task_uuid = $this->createTaskUuid($crontab);
+
+            $json = file_get_contents($file_name);
+            //强制转换为数组
+            $json_arr = (array)json_decode($json, true);
+
+            if (isset($json_arr[$task_uuid])) {
+                throwMessage('');
+            }
+
+            // 只保留最新的500条左右执行记录,多的清楚,避免数据无限增大
+            if (count($json_arr) >= 1000){
+                for ($i =0 ;$i<  500;$i++){
+                    array_shift($json_arr);
+                }
+            }
+
+            $json_arr[$task_uuid] = time();
+            file_put_contents($file_name,json_encode($json_arr));
+            $bool_state = true;
+
+        }catch (\Throwable $e){
+            //这里异常无需处理
         }
-        $key_name = $this->createTaskUuid($crontab);
-        if (!$this->getRedisHandle()->set($key_name, true,['nx', 'ex' => 86400]) ) {
-            return false;
+        //解锁任务
+        $this->unLockTask($crontab);
+        return $bool_state;
+    }
+
+    /**
+     * @param $crontab
+     * @return void
+     * 解锁任务
+     */
+    private function unLockTask($crontab)
+    {
+        if (!isset($this->fpsPool[$crontab['id']])) {
+            return;
         }
-        return true;
+        flock($this->fpsPool[$crontab['id']], LOCK_UN);
+        fclose($this->fpsPool[$crontab['id']]);
+        unset($this->fpsPool[$crontab['id']]);
     }
 
 
@@ -449,7 +373,6 @@ abstract class Server implements CrontabBootstrap
             ]);
         }
     }
-
 
     /**
      * 输出日志

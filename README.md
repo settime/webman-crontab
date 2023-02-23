@@ -6,19 +6,18 @@
 本组件代码基于 **webman crontab任务管理组件(多类型)** https://www.workerman.net/plugin/42 <br>
 衍生出来的。<br>
 
+
 ## 介绍
-跟原组件区别,去除think-orm依赖,重写任务锁逻辑,解决未知情况下出现死锁，改写多进程任务执行逻辑,代码优化。
+当时在使用原组件时，我调试模式频繁重启项目，并且频繁添加修改任务，导致莫名其妙的出现redis死锁,导致任务一直无法正常运行。
+基于此，我详细查看了该项目源码后，在他基础上彻底进行了重构，重写了并发加锁逻辑，添加了多进程间基于redis进行通讯，代码
+进行了优化，减少一些非必要的依赖，使其适用性更广。<br>
+
 
 安装
 
 ```shell
 composer require fly-cms/webman-crontab
 ```
-## 务必注意
-
-任务时间不能小于**5秒**<br>
-任务时间不能小于**5秒**<br>
-任务时间不能小于**5秒**<br>
 
 ## 使用
  创建任务数据表,这里数据表名称无限制.
@@ -64,8 +63,15 @@ CREATE TABLE IF NOT EXISTS `system_crontab_log`  (
 ```
 
 到app\process 目录新建自定义进程文件,示例代码如下:<br>
-注意: 示例代码里的6个方法都必须实现.
+注意: 示例代码里的4个方法都必须实现。
+插件不在乎你使用何种orm，你只需要把插件要获取或者修改的数据在该接口进行实现就行。
 ```shell
+<?php
+
+namespace app\process;
+
+use FlyCms\WebmanCrontab\Server;
+
 class WebmanCrontab extends Server
 {
 
@@ -87,20 +93,12 @@ class WebmanCrontab extends Server
     }
 
     /**
-     * @param $insertData
+     * @param $insert_data
      * @return mixed 这个方法负责写入任务执行日志
      */
-    public function writeRunLog($insertData = [])
+    public function writeRunLog($insert_data = [])
     {
-        CrontabLogModel::insertGetId($insertData);
-    }
-
-    /**
-     * @return \Redis 这个方法返回redis实例,这里务必返回redis实例而不是其它框架封装的缓存实例
-     */
-    public function getRedisHandle()
-    {
-        return redisCache()->handler();
+        CrontabLogModel::insertGetId($insert_data);
     }
 
     /**
@@ -131,8 +129,8 @@ class WebmanCrontab extends Server
     ],
 ````
 注意,只提供了重启接口,对任务进行任何的修改,直接调用重启接口
-
-## 重启任务
+这里有必要强调一遍，该组件只提供了一个接口
+## 修改任务
 ````shell
 $param = [
         'method' => 'crontabReload',
