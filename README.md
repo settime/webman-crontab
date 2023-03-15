@@ -3,15 +3,15 @@
 ## 概述
 
 基于 **webman** + **workerman/crontab** 的动态定时任务管理组件<br>
-本组件代码基于 **webman crontab任务管理组件(多类型)** https://www.workerman.net/plugin/42 <br>
-衍生出来的。<br>
+本组件代码参考 **webman crontab任务管理组件(多类型)** https://www.workerman.net/plugin/42 <br>
+重构出来的。<br>
 
 
 ## 介绍
-当时在使用原组件时，我调试模式频繁重启项目，并且频繁添加修改任务，导致莫名其妙的出现redis死锁,导致任务一直无法正常运行。
-基于此，我详细查看了该项目源码后，在他基础上彻底进行了重构，重写了并发加锁逻辑，添加了多进程间基于redis进行通讯，代码
-进行了优化，减少一些非必要的依赖，使其适用性更广。<br>
+基于php实现类似类似宝塔一样的计划任务
 
+## 注意事项
+仅测试了linux系统,windows与mac如果安装的话,不要开多进程,不要开多进程,不要开多进程
 
 安装
 
@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS `system_crontab_log`  (
   `target` varchar(255) NOT NULL COMMENT '任务调用目标字符串',
   `parameter` varchar(500)  COMMENT '任务调用参数', 
   `exception` text  COMMENT '任务执行或者异常信息输出',
+   `respond` text  COMMENT '执行任务的响应',
   `return_code` tinyint(1) NOT NULL DEFAULT 0 COMMENT '执行返回状态[0成功; 1失败]',
   `running_time` varchar(10) NOT NULL COMMENT '执行所用时间',
   `create_time` int(11) NOT NULL DEFAULT 0 COMMENT '创建时间',
@@ -62,79 +63,60 @@ CREATE TABLE IF NOT EXISTS `system_crontab_log`  (
 ) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '定时器任务执行日志表' ROW_FORMAT = DYNAMIC
 ```
 
-到app\process 目录新建自定义进程文件,示例代码如下:<br>
-注意: 示例代码里的4个方法都必须实现。
-插件不在乎你使用何种orm，你只需要把插件要获取或者修改的数据在该接口进行实现就行。
+到配置目录下实现如下代码,示例代码如下:<br>
 ```shell
-<?php
 
-namespace app\process;
-
-use FlyCms\WebmanCrontab\Server;
-
-class WebmanCrontab extends Server
-{
-
-    /**
-     * @return mixed 这个方法需要返回数据库里所有任务
-     */
-    public function getAllTask()
-    {
-        return CrontabModel::select()->toArray();
-    }
-
-    /**
-     * @param $id
-     * @return mixed 这个方法需要根据id返回该条任务数据
-     */
-    public function getTask($id)
-    {
-        return CrontabModel::where('id',$id)->find();
-    }
-
-    /**
-     * @param $insert_data
-     * @return mixed 这个方法负责写入任务执行日志
-     */
-    public function writeRunLog($insert_data = [])
-    {
-        CrontabLogModel::insertGetId($insert_data);
-    }
-
-    /**
-     * @param $id
-     * @param $last_running_time
-     * @return mixed 修改任务最后执行时间与执行次数
-     */
-    public function updateTaskRunState($id, $last_running_time)
-    {
-       return  CrontabModel::where('id',$id)
+return [
+    'enable' => true,
+    'listen'            => '0.0.0.0:2345',
+    'debug'             => true, //控制台输出日志
+    'write_log'         => true,// 是否记录任务日志
+    'redis' => [
+        'host' => 'redis://127.0.0.1:6379',
+        'options' => [
+            'auth' => null,       // 密码，字符串类型，可选参数
+        ]
+    ],
+    'getAllTask' => function(){
+        //获取所有任务
+        return \app\model\CrontabModel::select()->toArray();
+    },
+    'getTask' => function($id){
+        //获取某个任务
+        return \app\model\CrontabModel::where('id',$id)->find();
+    },
+    'writeRunLog' => function($insert_data){
+        //写入运行日志
+        \app\model\CrontabLogModel::insertGetId($insert_data);
+    },
+    'updateTaskRunState' => function($id, $last_running_time){
+        //更新任务最后运行时间,这里要把运行次数加 1
+        return  \app\model\CrontabModel::where('id',$id)
             ->update([
-               'last_running_time' => $last_running_time,
-                'running_times' => Db::raw(' running_times + 1')
+                'last_running_time' => $last_running_time,
+                'running_times' => \think\facade\Db::raw(' running_times + 1')
             ]);
     }
-
-}
+];
 
 ```
 
-接着到config/process.php 添加自定义进程任务,示例如下:<br>
-注意事项,如果监听的地址不是2345端口,请注意修改插件配置端口与之对应
+接着打开配置目录下process.php 示例如下:<br>
+注意事项,这里的端口要与上面端口进行对应
 ````shell
-    'WebmanCrontab' => [
-        'handler' => \app\process\WebmanCrontab::class,
+return [
+    'webman-crontab'  => [
+        'handler'     => \FlyCms\WebmanCrontab\Server::class,
+        'count'       => 1,
         'listen' => 'text://0.0.0.0:2345',
-        'count' => 4,
-    ],
+    ]
+];
 ````
-注意,只提供了重启接口,对任务进行任何的修改,直接调用重启接口
-这里有必要强调一遍，该组件只提供了一个接口
-## 修改任务
-````shell
-$param = [
-        'method' => 'crontabReload',
-        'args' => ['id' => '1,2,3']
-    ];
-$result = \FlyCms\WebmanCrontab\Client::instance()->request($param);
-````
+
+## 用法
+使用示例请参考test文件的内容
+
+## 演示
+![](src/test/img/img.png)
+![](src/test/img/img_1.png)
+![](src/test/img/img_2.png)

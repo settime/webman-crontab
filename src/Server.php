@@ -2,8 +2,6 @@
 
 namespace FlyCms\WebmanCrontab;
 
-use FlyCms\WebmanCrontab\event\ClassTask;
-use FlyCms\WebmanCrontab\event\CommandTask;
 use FlyCms\WebmanCrontab\event\EvalTask;
 use FlyCms\WebmanCrontab\event\EventBootstrap;
 use FlyCms\WebmanCrontab\event\ShellTask;
@@ -17,22 +15,17 @@ use Workerman\Redis\Client as RedisClient;
 /**
  *
  */
-abstract class Server implements CrontabBootstrap
+class Server
 {
-    public static $FORBIDDEN_STATUS = '0';
-
-    public static $NORMAL_STATUS = '1';
 
     /**
      * @var EventBootstrap[]
      * 任务类型与与之对应的解析类
      */
     public $taskType = [
-        1 => CommandTask::class,
-        2 => ClassTask::class,
-        3 => UrlTask::class,
-        4 => EvalTask::class,
-        5 => ShellTask::class
+        1 => UrlTask::class,
+        2 => EvalTask::class,
+        3 => ShellTask::class
     ];
 
     /**
@@ -51,6 +44,8 @@ abstract class Server implements CrontabBootstrap
      * @var bool
      */
     protected $writeLog = true;
+
+    protected $config = [];
 
     /**
      * @var array
@@ -116,12 +111,11 @@ abstract class Server implements CrontabBootstrap
         //订阅任务改变事件
         $this->subscribeClient->subscribe('change_contrab', function ($channel, $message) {
             $data = json_decode($message, true);
-            $method = $data['method'] ?? '';
             $args = $data['args'] ?? '';
-            call_user_func([$this, $method], $args);
+            $this->crontabReload($args);
         });
 
-        //订阅一个心跳链接,避免通讯断了
+        //订阅一个心跳链接
         $this->subscribeClient->subscribe('ping', function () {
             return;
         });
@@ -135,6 +129,7 @@ abstract class Server implements CrontabBootstrap
     public function onWorkerStart(Worker $worker)
     {
         $config = config('plugin.fly-cms.webman-crontab.app');
+        $this->config = $config;
 
         $this->debug = $config['debug'] ?? true;
         $this->writeLog = $config['write_log'] ?? true;
@@ -193,7 +188,8 @@ abstract class Server implements CrontabBootstrap
      */
     private function crontabInit()
     {
-        $data = $this->getAllTask();
+
+        $data = $this->config['getAllTask']();
         foreach ($data as $item) {
             $this->crontabRun($item['id']);
         }
@@ -206,11 +202,11 @@ abstract class Server implements CrontabBootstrap
      */
     private function crontabRun($id)
     {
-        $data = $this->getTask($id);
+        $data = $this->config['getTask']($id);
         if (empty($data)) {
             return;
         }
-        if ($data['status'] != self::$NORMAL_STATUS) {
+        if ( intval($data['status']) == 0) {
             return;
         }
 
@@ -218,7 +214,7 @@ abstract class Server implements CrontabBootstrap
             //运行次数加1,很重要,多进程情况下用来检测当前次数是否已执行
             $data['running_times'] += 1;
 
-            $startTime = microtime(true);
+            $start_time = microtime(true);
             //获取锁.
             if (!$this->lockTask($data)) {
                 $this->isSingleton($data);
@@ -227,32 +223,28 @@ abstract class Server implements CrontabBootstrap
 
             if (!isset($this->taskType[$data['type']])){
                 //任务类型不正确,
-                $resultData = [
-                    'result' => false, 'code' => 1, 'exception' => '执行任务失败, 任务类型错误-----任务id: ' . $data['id']
+                $result_data = [
+                    'result' => false, 'code' => 1,'respond' => '', 'exception' => '执行任务失败, 任务类型错误-----任务id: ' . $data['id']
                 ];
             }else{
-                $resultData = $this->taskType[$data['type']]::parse($data);
+                $result_data = $this->taskType[$data['type']]::parse($data);
             }
-            $result = $resultData['result'];
-            $code = $resultData['code'];
-            $exception = $resultData['exception'];
+            $result = $result_data['result'];
+            $code = $result_data['code'];
+            $exception = $result_data['exception'];
+            $respond = $result_data['respond'];
 
             $this->writeln('worker:' . $this->worker->id . '  执行定时器任务#' . $data['id'] . ' ' . $data['rule'] . ' ' . $data['target'], $result);
             $this->isSingleton($data);
-            $endTime = microtime(true);
+            $end_time = microtime(true);
 
-            $this->updateTaskRunState($data['id'], $startTime);
+            $this->config['updateTaskRunState']($data['id'], $start_time);
 
-            $this->crontabRunLog($data, $startTime, $endTime, $code, $exception);
-
+            $this->crontabRunLog($data, $start_time, $end_time, $respond,$code, $exception);
         });
 
         $this->crontabPool[$data['id']] = [
             'id' => $data['id'],
-            'target' => $data['target'],
-            'rule' => $data['rule'],
-            'parameter' => $data['parameter'],
-            'singleton' => $data['singleton'],
             'create_time' => date('Y-m-d H:i:s'),
             'crontab' => $crontab,
         ];
@@ -291,27 +283,34 @@ abstract class Server implements CrontabBootstrap
      */
     private function lockTask($crontab)
     {
-        $file_name = __DIR__.'/temp/'. "crontab_task_{$crontab['id']}.json";
+
         $bool_state = false;
         try{
+            $path = __DIR__.'/temp';
+
+            if (!is_dir($path)){
+                mkdir($path,666);
+            }
+            $file_name = $path . "/crontab_task_{$crontab['id']}.json";
 
             $this->fpsPool[$crontab['id']] = fopen($file_name, 'a+');
             if (!$this->fpsPool[$crontab['id']]) {
-                throwMessage('');
+                throw new \Exception("读取文件失败");
             }
             $bool = flock($this->fpsPool[$crontab['id']], LOCK_EX);
             if (!$bool) {
-                throwMessage('');
+                throw new \Exception("加锁失败");
             }
 
             $task_uuid = $this->createTaskUuid($crontab);
+
 
             $json = file_get_contents($file_name);
             //强制转换为数组
             $json_arr = (array)json_decode($json, true);
 
             if (isset($json_arr[$task_uuid])) {
-                throwMessage('');
+                throw new \Exception('');
             }
 
             // 只保留最新的500条左右执行记录,多的清楚,避免数据无限增大
@@ -328,48 +327,39 @@ abstract class Server implements CrontabBootstrap
         }catch (\Throwable $e){
             //这里异常无需处理
         }
-        //解锁任务
-        $this->unLockTask($crontab);
-        return $bool_state;
-    }
 
-    /**
-     * @param $crontab
-     * @return void
-     * 解锁任务
-     */
-    private function unLockTask($crontab)
-    {
-        if (!isset($this->fpsPool[$crontab['id']])) {
-            return;
+        if (isset($this->fpsPool[$crontab['id']])) {
+            //解锁任务
+            flock($this->fpsPool[$crontab['id']], LOCK_UN);
+            fclose($this->fpsPool[$crontab['id']]);
+            unset($this->fpsPool[$crontab['id']]);
         }
-        flock($this->fpsPool[$crontab['id']], LOCK_UN);
-        fclose($this->fpsPool[$crontab['id']]);
-        unset($this->fpsPool[$crontab['id']]);
+        return $bool_state;
     }
 
 
     /**
      * @param $data array 任务数据
-     * @param $startTime int 任务开始时间
-     * @param $endTime int 任务执行结束时间
+     * @param $start_time int 任务开始时间
+     * @param $end_time int 任务执行结束时间
+     * @param string $respond 执行任务的响应信息
      * @param $code int 执行状态码,0成功 1异常
      * @param $exception string 异常信息
      * @return void
      * 记录执行日志
      */
-    private function crontabRunLog($data, $startTime, $endTime, $code = 0, $exception = '')
+    private function crontabRunLog($data, $start_time, $end_time, $respond='', $code = 0, $exception = '')
     {
         if ($this->writeLog) {
-            $this->writeRunLog([
+            $this->config['writeRunLog']([
                 'crontab_id' => $data['id'] ?? '',
                 'target' => $data['target'] ?? '',
                 'parameter' => $data['parameter'] ?? '',
-                'exception' => '进程id: ' . $this->worker->id . '--执行次数:' . $data['running_times'] . '---' . $exception,
+                'exception' => '执行进程id: ' . $this->worker->id . '--执行次数:' . $data['running_times'] . '---' . $exception,
+                'respond' => $respond,
                 'return_code' => $code,
-                'running_time' => round($endTime - $startTime, 6),
-                'create_time' => $startTime,
-                'update_time' => $startTime,
+                'running_time' => round($end_time - $start_time, 6),
+                'create_time' => $start_time,
             ]);
         }
     }

@@ -13,14 +13,15 @@ class EvalTask implements EventBootstrap
         $result = true;
         $code = 0;
         $exception = '';
+        $respond = '';
         try {
-            eval($crontab['target']);
+            $respond = eval('return '. $crontab['target']);
         } catch (\Throwable $throwable) {
             $result = false;
             $code = 1;
             $exception = $throwable->getMessage();
         }
-        return ['result' => $result, 'code' => $code, 'exception' => $exception];
+        return ['result' => $result,'respond'=> $respond, 'code' => $code, 'exception' => $exception];
     }
 
 }
