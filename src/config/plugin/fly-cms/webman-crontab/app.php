@@ -1,5 +1,6 @@
 <?php
 
+
 return [
     'enable' => true,
     'listen'            => '0.0.0.0:2345',
@@ -10,6 +11,11 @@ return [
         'options' => [
             'auth' => null,       // 密码，字符串类型，可选参数
         ]
+    ],
+    'task_handle' => [ //任务操作类
+        1 => \FlyCms\WebmanCrontab\event\UrlTask::class,
+        2 => \FlyCms\WebmanCrontab\event\EvalTask::class,
+        3 => \FlyCms\WebmanCrontab\event\ShellTask::class
     ],
     'getAllTask' => function(){
         //获取所有任务

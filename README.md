@@ -75,6 +75,11 @@ return [
             'auth' => null,       // 密码，字符串类型，可选参数
         ]
     ],
+    'task_handle' => [ //任务操作类
+        1 => \FlyCms\WebmanCrontab\event\UrlTask::class,
+        2 => \FlyCms\WebmanCrontab\event\EvalTask::class,
+        3 => \FlyCms\WebmanCrontab\event\ShellTask::class
+    ],
     'getAllTask' => function(){
         //获取所有任务
         return \app\model\CrontabModel::select()->toArray();
@@ -129,7 +134,7 @@ Route::any('/admin/taskSet/delete',[TaskSet::class,'delete']);
 ```
 第二步,创建控制器文件<br>
 ***这里你需要做的功能是***<br>
-1 导入对应模型类<br>
+1 创建对应模型类<br>
 2 edit方法添加对应的参数校验
 ```shell
 <?php
@@ -190,7 +195,7 @@ class TaskSet
 
         $check_arr = [
             'second' => function () use ($second) {
-                //  Validate::make()->isRequire("请输入执行秒数")->isInteger('秒数必须为整数')->isEgt('1','秒数不能小于1')
+                //  Validate::make()->isRequire("请输入执行秒数")->isInteger('秒数必须为整数')->isEgt('5','秒数不能小于5')
                 //     ->isElt(59, "秒数不能大于59")->check($second);
             },
             'minute' => function () use ($minute) {
@@ -264,7 +269,7 @@ class TaskSet
                 'status' => $status,  'singleton' => $singleton,
                 'task_cycle' => $task_cycle, 'cycle_rule' => json_encode([
                     'month' => $month, 'week' => $week, 'day' => $day, 'hour' => $hour, 'minute' => $minute, 'second' => $second,
-                ])//保存周期规则,这样方便编辑的时候重新渲染回去
+                ])
             ]);
         } else {
             $id = CrontabModel::insertGetId([
@@ -382,14 +387,7 @@ class TaskSet
     {
         //重启任务
         $param = ['method' => 'crontabReload', 'args' => ['id' => $id_str]];
-
-        $result = Task\Client::instance()->request($param);
-
-        $code = $result['code'] ?? 0;
-        if ($code == 200) {
-            return $result['msg'];
-        }
-        throw new \Exception($result['msg'] ?? '请求异常');
+        Task\Client::request($param);
     }
 
 }

@@ -2,10 +2,7 @@
 
 namespace FlyCms\WebmanCrontab;
 
-use FlyCms\WebmanCrontab\event\EvalTask;
 use FlyCms\WebmanCrontab\event\EventBootstrap;
-use FlyCms\WebmanCrontab\event\ShellTask;
-use FlyCms\WebmanCrontab\event\UrlTask;
 use Workerman\Connection\TcpConnection;
 use Workerman\Crontab\Crontab;
 use Workerman\Lib\Timer;
@@ -25,11 +22,7 @@ class Server
      * @var EventBootstrap[]
      * 任务类型与与之对应的解析类
      */
-    public $taskType = [
-        1 => UrlTask::class,
-        2 => EvalTask::class,
-        3 => ShellTask::class
-    ];
+    public $taskType = [];
 
     /**
      * @var Worker 进程
@@ -127,6 +120,7 @@ class Server
     {
         $config = config('plugin.fly-cms.webman-crontab.app');
         $this->config = $config;
+        $this->taskType = $config['task_handle'] ?? [];
 
         $this->debug = $config['debug'] ?? true;
         $this->writeLog = $config['write_log'] ?? true;
@@ -226,8 +220,8 @@ class Server
                 $result_data = $this->taskType[$data['type']]::parse($data);
             }
 
-            $code = $result_data['code'];
-            $log = $result_data['log'];
+            $code = $result_data['code'] ?? 1;
+            $log = $result_data['log'] ?? '';
 
             $this->writeln('worker:' . $this->worker->id . '  执行定时器任务#' . $data['id'] . ' ' . $data['rule'] . ' ' . $data['target'], $code);
             $this->isSingleton($data);
