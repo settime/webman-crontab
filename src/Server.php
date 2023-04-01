@@ -374,7 +374,7 @@ class Server
         $method_arr = ['getAllTask','getTask','writeRunLog','updateTaskRunState'];
         if (in_array($name,$method_arr)){
             $config = $this->config;
-            $config[$name]($arguments);
+            return $config[$name](...$arguments);
         }
     }
 

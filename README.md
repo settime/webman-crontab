@@ -84,7 +84,7 @@ return [
         return \app\model\CrontabModel::where('id',$id)->find();
     },
     'writeRunLog' => function($insert_data){
-        //写入运行日志
+        //写入运行日志,注意，这个是日志模型，跟其它方法的模型不一样
         \app\model\CrontabLogModel::insertGetId($insert_data);
     },
     'updateTaskRunState' => function($id, $last_running_time){
@@ -171,9 +171,6 @@ class TaskSet
         $title = request()->input('title');
         $type = request()->input('type');
         $target = request()->input('target');
-        $parameter = request()->input('parameter');
-        $remark = request()->input('remark');
-        $sort = request()->input('sort', 0);
         $status = request()->input('status', 1);
         $singleton = request()->input('singleton', 1);
 
@@ -264,8 +261,7 @@ class TaskSet
         if ($id) {
             CrontabModel::where('id', $id)->update([
                 'title' => $title, 'type' => $type, 'rule' => $rule, 'target' => $target,
-                'status' => $status, 'remark' => $remark, 'singleton' => $singleton, 'sort' => $sort,
-                'parameter' => $parameter, 'create_time' => $now_time, 'update_time' => $now_time,
+                'status' => $status,  'singleton' => $singleton,
                 'task_cycle' => $task_cycle, 'cycle_rule' => json_encode([
                     'month' => $month, 'week' => $week, 'day' => $day, 'hour' => $hour, 'minute' => $minute, 'second' => $second,
                 ])//保存周期规则,这样方便编辑的时候重新渲染回去
@@ -273,8 +269,7 @@ class TaskSet
         } else {
             $id = CrontabModel::insertGetId([
                 'title' => $title, 'type' => $type, 'rule' => $rule, 'target' => $target,
-                'status' => $status, 'remark' => $remark, 'singleton' => $singleton, 'sort' => $sort,
-                'parameter' => $parameter, 'create_time' => $now_time, 'update_time' => $now_time,
+                'status' => $status, 'singleton' => $singleton, 'create_time' => $now_time, 
                 'task_cycle' => $task_cycle, 'cycle_rule' => json_encode([
                     'month' => $month, 'week' => $week, 'day' => $day, 'hour' => $hour, 'minute' => $minute, 'second' => $second,
                 ])

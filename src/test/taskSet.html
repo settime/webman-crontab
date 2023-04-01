@@ -133,7 +133,6 @@
 			, {field: 'target', title: '调用目标'}
 			, {field: 'running_times', title: '运行次数', width: 90}
 			, {field: 'last_running_time', title: '上次运行时间', width: 150}
-			, {field: 'remark', title: '备注'}
 			, {field: '', title: '启用', templet: "#is_enable", width: 110}
 			, {field: 'create_time', title: '创建时间', sort: true, width: 165}
 			, {field: '', title: '操作', templet: '#btn1', width: 250}
@@ -173,7 +172,7 @@
 				end: function () {
 					$('#updateForm').hide();
 					//关闭编辑弹窗清掉数据
-					let clear_arr = ['id','title','type','rule','target','parameter','remark','sort','status','singleton','task_cycle'];
+					let clear_arr = ['id','title','type','rule','target','status','singleton','task_cycle'];
 					for (let i in clear_arr){
 						let field = clear_arr[i];
 						$('#updateForm').find('#'+field).val('')
@@ -208,8 +207,7 @@
 						, {field: 'return_code', title: '运行结果', templet: '#return_code', width: 100}
 						, {field: 'target', title: '调用目标'}
 						, {field: 'running_time', title: '执行耗时', width: 120}
-						, {field: 'exception', title: '执行输出'}
-						, {field: 'respond', title: '响应信息'}
+						, {field: 'log', title: '执行日志'}
 						, {field: 'create_time', title: '执行时间', sort: true, width: 165}
 					]]
 					, page: true,
