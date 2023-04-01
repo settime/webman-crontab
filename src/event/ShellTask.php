@@ -11,17 +11,13 @@ class ShellTask implements EventBootstrap
      */
     public static function parse($crontab){
         $code = 0;
-        $result = true;
-        $respond = '';
-        $exception = '';
         try {
-            $respond = shell_exec($crontab['target']);
+            $log = shell_exec($crontab['target']);
         } catch (\Throwable $e) {
-            $result = false;
             $code = 1;
-            $exception = $e->getMessage();
+            $log = $e->getMessage();
         }
-        return ['result' => $result,'respond'=> $respond, 'code' => $code, 'exception' => $exception];
+        return ['code' => $code, 'log' => $log];
     }
 
 }

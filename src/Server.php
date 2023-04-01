@@ -13,7 +13,10 @@ use Workerman\Worker;
 use Workerman\Redis\Client as RedisClient;
 
 /**
- *
+ * @method getAllTask() 获取所有任务
+ * @method getTask($id) 获取单个任务
+ * @method writeRunLog($insert_data = []) 写入运行日志
+ * @method updateTaskRunState($id, $last_running_time) 更新任务状态
  */
 class Server
 {
@@ -63,12 +66,6 @@ class Server
      * @var Crontab[] array
      */
     private $crontabPool = [];
-
-    /**
-     * @var array
-     * 任务锁资源池
-     */
-    protected $fpsPool = [];
 
     /**
      * @var \Workerman\Redis\Client 订阅实例
@@ -155,7 +152,7 @@ class Server
         $args = $data['args'] ?? '';
 
         // 这里只有保留一个重启方法,对任务进行任何操作,直接调用重启解决
-        if (!in_array($method, ['crontabCreate', 'crontabDelete', 'crontabReload'])) {
+        if (!in_array($method, ['crontabReload'])) {
             $connection->send(json_encode(['code' => 400, 'msg' => "{$method} is not found"]));
             return;
         }
@@ -188,8 +185,7 @@ class Server
      */
     private function crontabInit()
     {
-
-        $data = $this->config['getAllTask']();
+        $data = $this->getAllTask();
         foreach ($data as $item) {
             $this->crontabRun($item['id']);
         }
@@ -202,11 +198,11 @@ class Server
      */
     private function crontabRun($id)
     {
-        $data = $this->config['getTask']($id);
+        $data = $this->getTask($id);
         if (empty($data)) {
             return;
         }
-        if ( intval($data['status']) == 0) {
+        if ( intval($data['status']) === 0) {
             return;
         }
 
@@ -224,23 +220,22 @@ class Server
             if (!isset($this->taskType[$data['type']])){
                 //任务类型不正确,
                 $result_data = [
-                    'result' => false, 'code' => 1,'respond' => '', 'exception' => '执行任务失败, 任务类型错误-----任务id: ' . $data['id']
+                    'code' => 1, 'log' => '执行任务失败, 任务类型错误---任务id: ' . $data['id']
                 ];
             }else{
                 $result_data = $this->taskType[$data['type']]::parse($data);
             }
-            $result = $result_data['result'];
-            $code = $result_data['code'];
-            $exception = $result_data['exception'];
-            $respond = $result_data['respond'];
 
-            $this->writeln('worker:' . $this->worker->id . '  执行定时器任务#' . $data['id'] . ' ' . $data['rule'] . ' ' . $data['target'], $result);
+            $code = $result_data['code'];
+            $log = $result_data['log'];
+
+            $this->writeln('worker:' . $this->worker->id . '  执行定时器任务#' . $data['id'] . ' ' . $data['rule'] . ' ' . $data['target'], $code);
             $this->isSingleton($data);
             $end_time = microtime(true);
 
-            $this->config['updateTaskRunState']($data['id'], $start_time);
+            $this->updateTaskRunState($data['id'], $start_time);
 
-            $this->crontabRunLog($data, $start_time, $end_time, $respond,$code, $exception);
+            $this->crontabRunLog($data, $start_time, $end_time, $log,$code);
         });
 
         $this->crontabPool[$data['id']] = [
@@ -261,6 +256,7 @@ class Server
         if ($crontab['singleton'] == 0 && isset($this->crontabPool[$crontab['id']])) {
             $this->writeln("定时器销毁", true);
             $this->crontabPool[$crontab['id']]['crontab']->destroy();
+            unset($this->crontabPool[$crontab['id']]);
         }
     }
 
@@ -293,17 +289,16 @@ class Server
             }
             $file_name = $path . "/crontab_task_{$crontab['id']}.json";
 
-            $this->fpsPool[$crontab['id']] = fopen($file_name, 'a+');
-            if (!$this->fpsPool[$crontab['id']]) {
+            $file_resource = fopen($file_name, 'a+');
+            if (!$file_resource) {
                 throw new \Exception("读取文件失败");
             }
-            $bool = flock($this->fpsPool[$crontab['id']], LOCK_EX);
+            $bool = flock($file_resource, LOCK_EX);
             if (!$bool) {
                 throw new \Exception("加锁失败");
             }
 
             $task_uuid = $this->createTaskUuid($crontab);
-
 
             $json = file_get_contents($file_name);
             //强制转换为数组
@@ -313,9 +308,9 @@ class Server
                 throw new \Exception('');
             }
 
-            // 只保留最新的500条左右执行记录,多的清楚,避免数据无限增大
-            if (count($json_arr) >= 1000){
-                for ($i =0 ;$i<  500;$i++){
+            // 只保留最新的100条左右执行记录就够了
+            if (count($json_arr) >= 200){
+                for ($i =0 ;$i<  100;$i++){
                     array_shift($json_arr);
                 }
             }
@@ -328,11 +323,11 @@ class Server
             //这里异常无需处理
         }
 
-        if (isset($this->fpsPool[$crontab['id']])) {
+        if (isset($file_resource)) {
             //解锁任务
-            flock($this->fpsPool[$crontab['id']], LOCK_UN);
-            fclose($this->fpsPool[$crontab['id']]);
-            unset($this->fpsPool[$crontab['id']]);
+            flock($file_resource, LOCK_UN);
+            fclose($file_resource);
+            unset($file_resource);
         }
         return $bool_state;
     }
@@ -342,21 +337,18 @@ class Server
      * @param $data array 任务数据
      * @param $start_time int 任务开始时间
      * @param $end_time int 任务执行结束时间
-     * @param string $respond 执行任务的响应信息
+     * @param $log string 执行任务的响应日志
      * @param $code int 执行状态码,0成功 1异常
-     * @param $exception string 异常信息
      * @return void
      * 记录执行日志
      */
-    private function crontabRunLog($data, $start_time, $end_time, $respond='', $code = 0, $exception = '')
+    private function crontabRunLog($data, $start_time, $end_time, $log='', $code = 0)
     {
         if ($this->writeLog) {
-            $this->config['writeRunLog']([
+            $this->writeRunLog([
                 'crontab_id' => $data['id'] ?? '',
                 'target' => $data['target'] ?? '',
-                'parameter' => $data['parameter'] ?? '',
-                'exception' => '执行进程id: ' . $this->worker->id . '--执行次数:' . $data['running_times'] . '---' . $exception,
-                'respond' => $respond,
+                'log' => '执行进程id: ' . $this->worker->id . '---执行次数:' . $data['running_times'] . '---响应信息：' . $log,
                 'return_code' => $code,
                 'running_time' => round($end_time - $start_time, 6),
                 'create_time' => $start_time,
@@ -367,12 +359,22 @@ class Server
     /**
      * 输出日志
      * @param $msg
-     * @param bool $isSuccess
+     * @param int $isSuccess
      */
     private function writeln($msg, bool $isSuccess)
     {
         if ($this->debug) {
-            echo 'worker:' . $this->worker->id . ' [' . date('Y-m-d H:i:s') . '] ' . $msg . ($isSuccess ? " [Ok] " : " [Fail] ") . PHP_EOL;
+            echo 'worker:' . $this->worker->id . ' [' . date('Y-m-d H:i:s') . '] ' . $msg . ($isSuccess == 0 ? " [Ok] " : " [Fail] ") . PHP_EOL;
+        }
+    }
+
+    public function __call($name, $arguments)
+    {
+        // TODO: Implement __call() method.
+        $method_arr = ['getAllTask','getTask','writeRunLog','updateTaskRunState'];
+        if (in_array($name,$method_arr)){
+            $config = $this->config;
+            $config[$name]($arguments);
         }
     }
 

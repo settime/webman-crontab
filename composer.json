@@ -10,6 +10,7 @@
     "php": ">=7.0",
     "ext-json": "*",
     "workerman/redis": "*",
+    "workerman/crontab": "^1.0",
     "ext-redis": "*"
   },
   "autoload": {

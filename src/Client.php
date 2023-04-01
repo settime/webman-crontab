@@ -10,7 +10,7 @@ class Client
 
     public static function instance()
     {
-        return new static(); //这里不想用单例模式,麻烦也没必要
+        return new static();
     }
 
     /**

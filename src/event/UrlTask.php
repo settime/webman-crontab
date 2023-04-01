@@ -11,20 +11,15 @@ class UrlTask implements EventBootstrap
     public static function parse($crontab){
         $url = trim($crontab['target'] ?? '');
         $code = 0;
-        $exception = '';
-        $respond = '';
-
         try {
             $client = new \GuzzleHttp\Client();
             $response = $client->get($url);
-            $result = $response->getStatusCode() === 200;
-            $respond = $response->getBody()->getContents();
+            $log = $response->getBody()->getContents();
         } catch (\Throwable $throwable) {
-            $result = false;
             $code = 1;
-            $exception = $throwable->getMessage();
+            $log = $throwable->getMessage();
         }
-        return ['result' => $result,'respond' => $respond, 'code' => $code, 'exception' => $exception];
+        return ['code' => $code, 'log' => $log];
     }
 
 }

@@ -10,18 +10,14 @@ class EvalTask implements EventBootstrap
      * @return array
      */
     public static function parse($crontab){
-        $result = true;
         $code = 0;
-        $exception = '';
-        $respond = '';
         try {
-            $respond = eval('return '. $crontab['target']);
+            $log = eval($crontab['target']);
         } catch (\Throwable $throwable) {
-            $result = false;
             $code = 1;
-            $exception = $throwable->getMessage();
+            $log = $throwable->getMessage();
         }
-        return ['result' => $result,'respond'=> $respond, 'code' => $code, 'exception' => $exception];
+        return ['log'=> $log, 'code' => $code];
     }
 
 }
