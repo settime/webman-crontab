@@ -1,4 +1,4 @@
-# workerman/crontab实现类型宝塔的任务管理
+# workerman/crontab实现类似宝塔的任务管理
 
 ## 概述
 
