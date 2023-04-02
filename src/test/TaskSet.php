@@ -9,6 +9,7 @@ use FlyCms\WebmanCrontab as Task;
 class TaskSet
 {
 
+
     public function index()
     {
         return view('taskSet', []);
@@ -55,7 +56,7 @@ class TaskSet
 
         $check_arr = [
             'second' => function () use ($second) {
-                //  Validate::make()->isRequire("请输入执行秒数")->isInteger('秒数必须为整数')->isEgt('1','秒数不能小于1')
+                //  Validate::make()->isRequire("请输入执行秒数")->isInteger('秒数必须为整数')->isEgt('5','秒数不能小于5')
                 //     ->isElt(59, "秒数不能大于59")->check($second);
             },
             'minute' => function () use ($minute) {
@@ -125,8 +126,8 @@ class TaskSet
 
         if ($id) {
             CrontabModel::where('id', $id)->update([
-                'title' => $title, 'type' => $type, 'rule' => $rule, 'target' => $target, 'status' => $status, 'singleton' => $singleton,
-                 'create_time' => $now_time,
+                'title' => $title, 'type' => $type, 'rule' => $rule, 'target' => $target,
+                'status' => $status,  'singleton' => $singleton,
                 'task_cycle' => $task_cycle, 'cycle_rule' => json_encode([
                     'month' => $month, 'week' => $week, 'day' => $day, 'hour' => $hour, 'minute' => $minute, 'second' => $second,
                 ])

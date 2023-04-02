@@ -6,9 +6,9 @@
     <link rel="stylesheet" href="/app/admin/component/pear/css/pear.css" />
     <script src="https://code.jquery.com/jquery-3.1.1.min.js"></script>
     <script src="/app/admin/component/layui/layui.js"></script>
-    <script src="/app/admin/component/layui/layui.js"></script>
     <script src="/app/admin/component/pear/pear.js"></script>
     <style>
+        .layui-table{width: 100% !important;}
         .table-btn {height: 26px;line-height: 26px;}
         .table-btn+.table-btn {
             margin-left: 10px;
@@ -43,6 +43,7 @@
 
 
 <form class="layui-form layui-fluid form-style hide" id="updateForm">
+
     <input type="hidden" name="id" value="" id="id">
 
     <div class="layui-form-item" >
@@ -227,7 +228,7 @@
             skin: 'layui-layer-rim',
             content: $('#'+id),
             title: '信息',
-            area: ['60%', '70%'], //宽高
+            area: ['70%', '80%'], //宽高
             zIndex:9999999,
             success: function () {
                 success();
@@ -251,7 +252,16 @@
             processData: false,
             contentType: false,
             success: function (res) {
-                layui.layer.msg(res.msg)
+
+                if (res.code == 0){
+                    layer.closeAll();
+                    layui.layer.msg(res.msg)
+                    setTimeout(()=>{
+                        $('#search').click();
+                    },1500)
+                }else{
+                    layui.layer.msg(res.msg)
+                }
             },
             error: function (XMLHttpRequest, textStatus, errorThrown,) {
                 layui.layer.msg('请求失败')
@@ -325,37 +335,28 @@
 
     //查看日志
     function renderLog(id) {
-        layui.layer.open({
-            type: 1,
-            skin: 'layui-layer-rim',
-            content: $('#task_log_form'),
-            title: '信息',
-            area: ['80%', '80%'], //宽高
-            zIndex:9999999,
-            success: function () {
-                setTimeout(()=>{
-                    layui.table.render({
-                        elem: '#task_log_table'
-                        , url: '/admin/taskSet/getLog'
-                        , method: "post",
-                        where: {'id': id,},
-                        cellMinWidth: 80 //全局定义常规单元格的最小宽度，layui 2.2.1 新增
-                        , cols: [[
-                            {field: 'id', title: 'ID', width: 80}
-                            , {field: 'return_code', title: '运行结果', templet: '#return_code', width: 100}
-                            , {field: 'target', title: '调用目标'}
-                            , {field: 'running_time', title: '执行耗时', width: 120}
-                            , {field: 'log', title: '日志信息'}
-                            , {field: 'create_time', title: '执行时间', sort: true, width: 165}
-                        ]]
-                        , page: true
-                    });
-                    layui.form.render();
-                },100)
-            },
-            end: function () {
-                $('#task_log_form').hide();
-            }
+        openWindow('task_log_form',()=>{
+            setTimeout(()=>{
+                layui.table.render({
+                    elem: '#task_log_table'
+                    , url: '/admin/taskSet/getLog'
+                    , method: "post",
+                    where: {
+                        'id': id,
+                    },
+                    cellMinWidth: 80 //全局定义常规单元格的最小宽度，layui 2.2.1 新增
+                    , cols: [[
+                        {field: 'id', title: 'ID', width: 80}
+                        , {field: 'return_code', title: '运行结果', templet: '#return_code', width: 100}
+                        , {field: 'target', title: '调用目标'}
+                        , {field: 'running_time', title: '执行耗时', width: 120}
+                        , {field: 'log', title: '执行日志'}
+                        , {field: 'create_time', title: '执行时间', sort: true, width: 165}
+                    ]]
+                    , page: true,
+                });
+                layui.form.render();
+            },100)
         })
     }
 
@@ -368,6 +369,10 @@
         let id = this.value;
         let state = obj.elem.checked ? 1 : 0;
     });
+
+    $('body').on('click','#search',function () {
+        $('#formData').submit();
+    })
 </script>
 
 </body>
