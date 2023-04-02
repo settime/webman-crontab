@@ -287,8 +287,7 @@ class Server
             if (!$file_resource) {
                 throw new \Exception("读取文件失败");
             }
-            $bool = flock($file_resource, LOCK_EX);
-            if (!$bool) {
+            if (!flock($file_resource, LOCK_EX)) {
                 throw new \Exception("加锁失败");
             }
 
@@ -317,7 +316,7 @@ class Server
             //这里异常无需处理
         }
 
-        if (isset($file_resource)) {
+        if (isset($file_resource) && $file_resource) {
             //解锁任务
             flock($file_resource, LOCK_UN);
             fclose($file_resource);

@@ -2,7 +2,20 @@
 <html lang="cn">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <link rel="stylesheet" href="/app/admin/component/layui/css/layui.css" />
+    <link rel="stylesheet" href="/app/admin/component/pear/css/pear.css" />
+    <script src="https://code.jquery.com/jquery-3.1.1.min.js"></script>
+    <script src="/app/admin/component/layui/layui.js"></script>
+    <script src="/app/admin/component/layui/layui.js"></script>
+    <script src="/app/admin/component/pear/pear.js"></script>
+    <style>
+        .table-btn {height: 26px;line-height: 26px;}
+        .table-btn+.table-btn {
+            margin-left: 10px;
+        }
+        .form-style{padding-right: 50px;padding-bottom: 50px;padding-top: 20px;box-sizing: border-box;position: relative}
+        .hide {display: none;}
+    </style>
 </head>
 <body>
 <div class="layui-fluid">
@@ -13,29 +26,26 @@
         <script type="text/html" id="toolbarDemo">
             <div class="layui-btn-container">
                 <button class="layui-btn pear-btn pear-btn-primary" id="search">刷新</button>
-                <button type="button" class="layui-btn layui-btn-normal" onclick="openMediumWindow('updateForm')">添加
-                </button>
+                <button type="button" class="layui-btn layui-btn-normal" onclick="openWindow('updateForm')">添加</button>
             </div>
         </script>
         <script type="text/html" id="is_enable">
-            <input type="checkbox" value="{{d.id}}" lay-skin="switch" lay-text="是|否" lay-filter="stateDemo" {{ d.status== 1 ? 'checked' : '' }}>
+            <input type="checkbox" value="{{d.id}}" lay-skin="switch" lay-text="是|否" lay-filter="task_status" {{ d.status== 1 ? 'checked' : '' }}>
         </script>
         <script type="text/html" id="btn1">
             <button type="button" class="layui-btn pear-btn pear-btn-primary table-btn" onclick="openEdit('{{d.id}}')">编辑
             </button>
             <button type="button" class="layui-btn table-btn layui-btn-info" onclick="renderLog('{{d.id}}')">日志</button>
-            <button class="layui-btn layui-btn-danger table-btn" onclick="deleteData('{{ d.id }}' ,'{{ d.title }}','/admin/taskSet/delete' )">删除</button>
         </script>
 
     </table>
 </div>
 
 
-
-<form class="layui-form layui-fluid form-style"  style="display: none" id="updateForm">
+<form class="layui-form layui-fluid form-style hide" id="updateForm">
     <input type="hidden" name="id" value="" id="id">
 
-    <div class="layui-form-item">
+    <div class="layui-form-item" >
         <label class="layui-form-label">任务名称</label>
         <div class="layui-input-block">
             <input name="title" id="title" autocomplete="off" class="layui-input" type="text">
@@ -46,6 +56,9 @@
         <label class="layui-form-label">任务类型</label>
         <div class="layui-input-block">
             <select name="type" id="type" class="task_select">
+                <option value="1">url</option>
+                <option value="2">eval</option>
+                <option value="3">shell</option>
             </select>
         </div>
     </div>
@@ -84,7 +97,7 @@
     </div>
 
     <div class="layui-form-item">
-        <label class="layui-form-label">是否单次执行</label>
+        <label class="layui-form-label">单次执行</label>
         <div class="layui-input-block">
             <input name="singleton" value="0" title="是" type="radio">
             <input name="singleton" checked value="1" title="否" type="radio">
@@ -93,14 +106,13 @@
 
     <div class="layui-form-item">
         <div class="layui-input-block">
-            <button class="layui-btn" type="button" onclick="AdminClass.submitData('/admin/taskSet/update','updateForm',this)">立即提交</button>
+            <button class="layui-btn" onclick="submitData()" type="button" >立即提交</button>
         </div>
     </div>
 </form>
 
 
-
-<form class="layui-form  layui-fluid form-style" style="display: none" id="task_log_form">
+<form class="layui-form  layui-fluid form-style hide" id="task_log_form">
     <table class="layui-hide" id="task_log_table">
         <script type="text/html" id="return_code">
             {{#  if(d.return_code == 0){ }}
@@ -114,115 +126,10 @@
 
 
 <script>
-	layui.table.render({
-		elem: '#data'
-		, url: '/admin/taskSet/list'
-		, toolbar: '#toolbarDemo'
-		, method: "post",
-		cellMinWidth: 80 //全局定义常规单元格的最小宽度
-		, cols: [[
-			{field: 'id', title: 'ID', width: 80}
-			, {field: 'title', title: '任务标题',}
-			, {field: 'rule_name', title: '执行周期', width: 180}
-			, {field: 'target', title: '调用目标'}
-			, {field: 'running_times', title: '运行次数', width: 90}
-			, {field: 'last_running_time', title: '上次运行时间', width: 150}
-			, {field: '', title: '启用', templet: "#is_enable", width: 110}
-			, {field: 'create_time', title: '创建时间', sort: true, width: 165}
-			, {field: '', title: '操作', templet: '#btn1', width: 250}
-		]]
-		, page: true,
-	});
-
-	// 渲染select
-	AdminClass.renderSelect({
-		'elem': '.task_select',
-		'data': JSON.parse('{$task_select|raw}'),
-	})
-
-    //打开编辑窗口
-	function openEdit(id) {
-		Ajax.post('/admin/taskSet/get', {'id': id}).then(res => {
-			if (res.code != 0) {
-				layMsg(res.msg);
-				return;
-			}
-			layer.open({
-				type: 1,
-				skin: 'layui-layer-rim',
-				content: $('#updateForm'),
-				title: '信息',
-				area: ['90%', '90%'], //宽高
-				zIndex:9999999,
-				success: function () {
-					let info = res.data;
-					renderInfo(info);
-					$('#updateForm').find("input[name='status'][value='" + info.status + "']").prop("checked", true);
-					$('#updateForm').find("input[name='singleton'][value='" + info.singleton + "']").prop("checked", true);
-					changeTask(info.task_cycle)
-					renderInfo(info.cycle_rule)
-					layui.form.render();
-				},
-				end: function () {
-					$('#updateForm').hide();
-					//关闭编辑弹窗清掉数据
-					let clear_arr = ['id','title','type','rule','target','status','singleton','task_cycle'];
-					for (let i in clear_arr){
-						let field = clear_arr[i];
-						$('#updateForm').find('#'+field).val('')
-					}
-					$('#cron-box').empty();
-				}
-			})
-		})
-	}
-
-	//查看日志
-	function renderLog(id) {
-
-		layer.open({
-			type: 1,
-			skin: 'layui-layer-rim',
-			content: $('#task_log_form'),
-			title: '信息',
-			area: ['90%', '90%'], //宽高
-			zIndex:9999999,
-			success: function () {
-				table.render({
-					elem: '#task_log_table'
-					, url: '/admin/taskSet/getLog'
-					, method: "post",
-					where: {
-						'id': id,
-					},
-					cellMinWidth: 80 //全局定义常规单元格的最小宽度，layui 2.2.1 新增
-					, cols: [[
-						{field: 'id', title: 'ID', width: 80}
-						, {field: 'return_code', title: '运行结果', templet: '#return_code', width: 100}
-						, {field: 'target', title: '调用目标'}
-						, {field: 'running_time', title: '执行耗时', width: 120}
-						, {field: 'log', title: '执行日志'}
-						, {field: 'create_time', title: '执行时间', sort: true, width: 165}
-					]]
-					, page: true,
-				});
-				layui.form.render();
-			},
-			end: function () {
-				$('#task_log_form').hide();
-			}
-		})
-	}
-
-	//监听任务执行周期切换
-	form.on("select(task_cycle)", function (data) {
-		let value = parseInt(data.value);
-		changeTask(value)
-	})
 
     //任务类型切换
-	function changeTask(value){
-		let month = `
+    function changeTask(value){
+        let month = `
 	    <div class="layui-inline">
             <div class="layui-input-inline" style="width: 80px">
                 <input type="text" name="month" id="month" autocomplete="off" class="layui-input">
@@ -230,8 +137,7 @@
             <div class="layui-form-mid layui-word-aux">月</div>
         </div>
 		`
-
-		let week = `
+        let week = `
 		<div class="layui-inline">
             <div class="layui-input-inline" style="width: 80px">
                 <select lay-filter="week" name="week">
@@ -247,7 +153,7 @@
         </div>
 		`;
 
-		let day = `
+        let day = `
 	    <div class="layui-inline">
             <div class="layui-input-inline" style="width: 80px">
                 <input type="text" name="day" id="day" autocomplete="off" class="layui-input">
@@ -255,7 +161,7 @@
             <div class="layui-form-mid layui-word-aux">号</div>
         </div>
 		`
-		let hour = `
+        let hour = `
         <div class="layui-inline">
             <div class="layui-input-inline" style="width: 80px">
                 <input type="text" name="hour" id="hour" autocomplete="off" class="layui-input">
@@ -263,7 +169,7 @@
             <div class="layui-form-mid layui-word-aux">点</div>
         </div>
         `
-		let minute = `
+        let minute = `
           <div class="layui-inline">
             <div class="layui-input-inline" style="width: 80px">
                 <input type="text" name="minute" id="minute" autocomplete="off" class="layui-input">
@@ -271,7 +177,7 @@
             <div class="layui-form-mid layui-word-aux">分</div>
         </div>
         `
-		let second = `
+        let second = `
         <div class="layui-inline">
             <div class="layui-input-inline" style="width:80px">
                 <input type="text" name="second" id="second" autocomplete="off" class="layui-input">
@@ -279,42 +185,189 @@
             <div class="layui-form-mid layui-word-aux">秒</div>
         </div>
         `
-		let insert_arr = [];
-		switch (value) {
-			case 1:
-				insert_arr.push(hour,minute);
-				break;
-			case 2:
-				insert_arr.push(minute);
-				break;
-			case 3:
-				insert_arr.push(hour);
-				insert_arr.push(minute);
-				break;
-			case 4:
-				insert_arr.push(minute);
-				break;
-			case 5:
-				insert_arr.push(second);
-				break;
-			case 6:
-				insert_arr.push(week,hour,minute)
-				break;
-			case 7:
-				insert_arr.push(day,hour,minute)
-				break;
-			case 8:
-				insert_arr.push(month,day,hour,minute);
-				break;
-		}
-		$('#cron-box').empty();
-		for (let i in insert_arr){
-			let item = insert_arr[i];
-			$('#cron-box').append(item);
-		}
-		layui.form.render('select');
-	}
+        let insert_arr = [];
+        switch (value) {
+            case 1:
+                insert_arr.push(hour,minute);
+                break;
+            case 2:
+                insert_arr.push(minute);
+                break;
+            case 3:
+                insert_arr.push(hour);
+                insert_arr.push(minute);
+                break;
+            case 4:
+                insert_arr.push(minute);
+                break;
+            case 5:
+                insert_arr.push(second);
+                break;
+            case 6:
+                insert_arr.push(week,hour,minute)
+                break;
+            case 7:
+                insert_arr.push(day,hour,minute)
+                break;
+            case 8:
+                insert_arr.push(month,day,hour,minute);
+                break;
+        }
+        $('#cron-box').empty();
+        for (let i in insert_arr){
+            let item = insert_arr[i];
+            $('#cron-box').append(item);
+        }
+        layui.form.render('select');
+    }
 
+    function openWindow(id,success=()=>{},end=()=>{}){
+        layer.open({
+            type: 1,
+            skin: 'layui-layer-rim',
+            content: $('#'+id),
+            title: '信息',
+            area: ['60%', '70%'], //宽高
+            zIndex:9999999,
+            success: function () {
+                success();
+                layui.form.render();
+            },
+            end: function () {
+                end();
+                $('#'+id).hide();
+            }
+        })
+    }
+
+    function submitData(){
+        let formData = new FormData($('#updateForm')[0]);
+        return $.ajax({
+            url: '/admin/taskSet/edit',
+            data: formData,
+            type: 'post',
+            dataType: 'json',
+            async: true,
+            processData: false,
+            contentType: false,
+            success: function (res) {
+                layui.layer.msg(res.msg)
+            },
+            error: function (XMLHttpRequest, textStatus, errorThrown,) {
+                layui.layer.msg('请求失败')
+            },
+        })
+    }
+
+    layui.table.render({
+        elem: '#data'
+        , url: '/admin/taskSet/list'
+        , toolbar: '#toolbarDemo'
+        , method: "post",
+        cellMinWidth: 80 //全局定义常规单元格的最小宽度
+        , cols: [[
+            {field: 'id', title: 'ID', width: 80}
+            , {field: 'title', title: '任务标题',}
+            , {field: 'rule_name', title: '执行周期', width: 180}
+            , {field: 'target', title: '调用目标'}
+            , {field: 'running_times', title: '运行次数', width: 90}
+            , {field: 'last_running_time', title: '上次运行时间', width: 150}
+            , {field: '', title: '启用', templet: "#is_enable", width: 110}
+            , {field: 'create_time', title: '创建时间', sort: true, width: 165}
+            , {field: '', title: '操作', templet: '#btn1', width: 180}
+        ]]
+        , page: true,
+    });
+
+    //打开编辑窗口
+    function openEdit(id) {
+        return $.ajax({
+            url: '/admin/taskSet/get',
+            data:  {'id': id},
+            type: 'post',
+            dataType: 'json',
+            async: true,
+            processData: true,
+            contentType: false,
+            success: function (res) {
+                openWindow('updateForm',()=>{
+                    let info = res.data;
+                    $('#updateForm').find("input[name='status'][value='" + info.status + "']").prop("checked", true);
+                    $('#updateForm').find("input[name='singleton'][value='" + info.singleton + "']").prop("checked", true);
+                    changeTask(info.task_cycle)
+                    let cycle_rule = info.cycle_rule;
+                    for (let key in info) {
+                        if (typeof (info[key]) == 'string' || typeof (info[key]) == 'number') {
+                            $('#' + key).val(info[key]);
+                        }
+                    }
+                    for (let key in cycle_rule) {
+                        if (typeof (cycle_rule[key]) == 'string' || typeof (cycle_rule[key]) == 'number') {
+                            $('#' + key).val(cycle_rule[key]);
+                        }
+                    }
+                    layui.form.render();
+                },()=>{
+                    //关闭编辑弹窗清掉数据
+                    let clear_arr = ['id','title','type','rule','target','status','singleton','task_cycle'];
+                    for (let i in clear_arr){
+                        let field = clear_arr[i];
+                        $('#updateForm').find('#'+field).val('')
+                    }
+                    $('#cron-box').empty();
+                })
+            },
+            error: function (XMLHttpRequest, textStatus, errorThrown,) {
+                layui.layer.msg('请求失败')
+            },
+        })
+    }
+
+    //查看日志
+    function renderLog(id) {
+        layui.layer.open({
+            type: 1,
+            skin: 'layui-layer-rim',
+            content: $('#task_log_form'),
+            title: '信息',
+            area: ['80%', '80%'], //宽高
+            zIndex:9999999,
+            success: function () {
+                setTimeout(()=>{
+                    layui.table.render({
+                        elem: '#task_log_table'
+                        , url: '/admin/taskSet/getLog'
+                        , method: "post",
+                        where: {'id': id,},
+                        cellMinWidth: 80 //全局定义常规单元格的最小宽度，layui 2.2.1 新增
+                        , cols: [[
+                            {field: 'id', title: 'ID', width: 80}
+                            , {field: 'return_code', title: '运行结果', templet: '#return_code', width: 100}
+                            , {field: 'target', title: '调用目标'}
+                            , {field: 'running_time', title: '执行耗时', width: 120}
+                            , {field: 'log', title: '日志信息'}
+                            , {field: 'create_time', title: '执行时间', sort: true, width: 165}
+                        ]]
+                        , page: true
+                    });
+                    layui.form.render();
+                },100)
+            },
+            end: function () {
+                $('#task_log_form').hide();
+            }
+        })
+    }
+
+    //监听任务执行周期切换
+    layui.form.on("select(task_cycle)", function (data) {
+        let value = parseInt(data.value);
+        changeTask(value)
+    })
+    layui.form.on('switch(task_status)', function (obj) {
+        let id = this.value;
+        let state = obj.elem.checked ? 1 : 0;
+    });
 </script>
 
 </body>
