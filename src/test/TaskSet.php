@@ -20,7 +20,39 @@ class TaskSet
         $page =(int) request()->input('page', 1);
         $limit =(int) request()->input('limit', 10);
 
-        $data = CrontabModel::order(['id' => 'desc'])->append(['rule_name'])->page($page, $limit)->select();
+        $data = CrontabModel::order(['id' => 'desc'])->withAttr('rule_name',function ($value,$item){
+            $rule_arr =  json_decode($item['cycle_rule'],true);
+            switch ($item['task_cycle']){
+                case 1:
+                    $rule = "每天{$rule_arr['hour']}点{$rule_arr['minute']}分";
+                    break;
+                case 2:
+                    $rule = "每小时第{$rule_arr['minute']}分";
+                    break;
+                case 3:
+                    $rule = "{$rule_arr['hour']}小时第{$rule_arr['minute']}分";
+                    break;
+                case 4:
+                    $rule = "{$rule_arr['minute']}分";
+                    break;
+                case 5:
+                    $rule = "{$rule_arr['second']}秒";
+                    break;
+                case 6:
+                    $week_arr = [0=>'周日',1=>'周一',2=>'周二',3 =>'周三',4=>'周四',5=>'周五',6=>'周六'];
+                    $rule = "每{$week_arr[$rule_arr['week']]}第{$rule_arr['hour']}点{$rule_arr['minute']}分";
+                    break;
+                case 7:
+                    $rule = "每月{$rule_arr['day']}号{$rule_arr['hour']}点{$rule_arr['minute']}分";
+                    break;
+                case 8:
+                    $rule = "每年{$rule_arr['month']}月{$rule_arr['day']}号{$rule_arr['hour']}点{$rule_arr['minute']}分";
+                    break;
+                default:
+                    $rule = "任务规则不正确";
+            }
+            return $rule;
+        })->append(['rule_name'])->page($page, $limit)->select();
         $count = CrontabModel::count();
 
         return json([
