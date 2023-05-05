@@ -88,8 +88,11 @@ class TaskSet
 
         $check_arr = [
             'second' => function () use ($second) {
-                //  Validate::make()->isRequire("请输入执行秒数")->isInteger('秒数必须为整数')->isEgt('5','秒数不能小于5')
-                //     ->isElt(59, "秒数不能大于59")->check($second);
+                //注意，这里秒数必须是60的倍数，由于workerman/crontab解析问题，秒级任务的话，每一分钟他会直接重置一次计时器
+                $second = (int) $second;
+                if(60 % $second !== 0){
+                    throw new \Exception('秒级任务必须是60的倍数');
+                }
             },
             'minute' => function () use ($minute) {
                 //  Validate::make()->isRequire("请输入执行分钟")->isInteger('分钟必须为整数')->isElt(59, "分钟不能大于59")->check($minute);
