@@ -88,10 +88,10 @@ class TaskSet
 
         $check_arr = [
             'second' => function () use ($second) {
-                //注意，这里秒数必须是60的倍数，由于workerman/crontab解析问题，秒级任务的话，每一分钟他会直接重置一次计时器
+                //注意，这里秒数必须是60的因数，由于workerman/crontab解析问题，秒级任务的话，每一分钟他会直接重置一次计时器
                 $second = (int) $second;
                 if(60 % $second !== 0){
-                    throw new \Exception('秒级任务必须是60的倍数');
+                    throw new \Exception('秒级任务必须是60的因数');
                 }
             },
             'minute' => function () use ($minute) {
