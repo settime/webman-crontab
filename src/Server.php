@@ -199,6 +199,10 @@ class Server
         if ( intval($data['status']) === 0) {
             return;
         }
+        if ( intval($data['singleton']) === 0 && intval($data['running_times']) >= 1) {
+            return;
+        }
+
 
         $crontab = new Crontab($data['rule'], function () use (&$data) { //这里传参必须传引用
             //运行次数加1,很重要,多进程情况下用来检测当前次数是否已执行
